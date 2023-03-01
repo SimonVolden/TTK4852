@@ -82,7 +82,8 @@ if __name__ == "__main__":
     batch_size = 64
     learning_rate = 1e-3
     early_stop_count = 5
-    filename = "TTK4852/df_all.csv"
+    
+    filename = "df_all.csv"
     data_all = pd.read_csv(filename)
     data_train, data_test = train_test_split(data_all, test_size=0.1, random_state=42)
 
@@ -90,6 +91,8 @@ if __name__ == "__main__":
     test_array= convert_to_numpy(data_test)
 
     dataloaders = load_tare(batch_size,train_array, test_array)
+
+    
     model = ExampleModel(image_channels=66, num_classes=2)
     trainer = Trainer(
         batch_size,
