@@ -90,9 +90,10 @@ if __name__ == "__main__":
     train_array = convert_to_numpy(data_train)
     test_array= convert_to_numpy(data_test)
 
+
     dataloaders = load_tare(batch_size,train_array, test_array)
 
-    
+
     model = ExampleModel(image_channels=66, num_classes=2)
     trainer = Trainer(
         batch_size,
