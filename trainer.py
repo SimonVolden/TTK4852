@@ -4,54 +4,13 @@ import time
 import collections
 import utils
 import pathlib
-
-
-def compute_loss_and_accuracy(
-        dataloader: torch.utils.data.DataLoader,
-        model: torch.nn.Module,
-        loss_criterion: torch.nn.modules.loss._Loss):
-    """
-    Computes the average loss and the accuracy over the whole dataset
-    in dataloader.
-    Args:
-        dataloder: Validation/Test dataloader
-        model: torch.nn.Module
-        loss_criterion: The loss criterion, e.g: torch.nn.CrossEntropyLoss()
-    Returns:
-        [average_loss, accuracy]: both scalar.
-    """
-    # Tracking variables #sol
-    average_loss = 0 #sol
-    total_correct = 0 #sol
-    total_images = 0 #sol
-    total_steps = 0 #sol
-    average_loss = 0
-    accuracy = 0
-    # TODO: Implement this function (Task  2a)
-    with torch.no_grad():
-        for (X_batch, Y_batch) in dataloader:
-            # Transfer images/labels to GPU VRAM, if possible
-            X_batch = utils.to_cuda(X_batch)
-            Y_batch = utils.to_cuda(Y_batch)
-            # Forward pass the images through our model
-            output_probs = model(X_batch)
-
-            # Compute Loss and Accuracy
-            loss = loss_criterion(output_probs, Y_batch) #sol
-
-            # Predicted class is the max index over the column dimension #sol
-            predictions = output_probs.argmax(dim=1).squeeze() #sol
-            Y_batch = Y_batch.squeeze() #sol
-            #sol
-            # Update tracking variables #sol
-            average_loss += loss.item() #sol
-            total_steps += 1 #sol
-            total_correct += (predictions == Y_batch).sum().item() #sol
-            total_images += predictions.shape[0] #sol
-    average_loss = average_loss / total_steps #sol
-    accuracy = total_correct / total_images #sol
-    return average_loss, accuracy
-
+from torchvision import transforms
+import pathlib
+from torch.utils.data.sampler import SubsetRandomSampler
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.model_selection import train_test_split
+import numpy as np
 
 class Trainer:
 
@@ -212,3 +171,130 @@ class Trainer:
                 f"Could not load best checkpoint. Did not find under: {self.checkpoint_dir}")
             return
         self.model.load_state_dict(state_dict)
+
+def convert_to_numpy(df):
+    df.drop(columns = "geometry", inplace = True)
+    df.drop(columns = ["Unnamed: 0", "band_0", "band_1", "band_2","lat", "lon" ], inplace = True)
+    return df.to_numpy().astype('uint8')
+
+
+#Helper functions 
+def compute_loss_and_accuracy(
+        dataloader: torch.utils.data.DataLoader,
+        model: torch.nn.Module,
+        loss_criterion: torch.nn.modules.loss._Loss):
+    """
+    Computes the average loss and the accuracy over the whole dataset
+    in dataloader.
+    Args:
+        dataloder: Validation/Test dataloader
+        model: torch.nn.Module
+        loss_criterion: The loss criterion, e.g: torch.nn.CrossEntropyLoss()
+    Returns:
+        [average_loss, accuracy]: both scalar.
+    """
+    # Tracking variables #sol
+    average_loss = 0 #sol
+    total_correct = 0 #sol
+    total_images = 0 #sol
+    total_steps = 0 #sol
+    average_loss = 0
+    accuracy = 0
+    # TODO: Implement this function (Task  2a)
+    with torch.no_grad():
+        for (X_batch, Y_batch) in dataloader:
+            # Transfer images/labels to GPU VRAM, if possible
+            X_batch = utils.to_cuda(X_batch)
+            Y_batch = utils.to_cuda(Y_batch)
+            # Forward pass the images through our model
+            output_probs = model(X_batch)
+
+            # Compute Loss and Accuracy
+            loss = loss_criterion(output_probs, Y_batch) #sol
+
+            # Predicted class is the max index over the column dimension #sol
+            predictions = output_probs.argmax(dim=1).squeeze() #sol
+            Y_batch = Y_batch.squeeze() #sol
+            #sol
+            # Update tracking variables #sol
+            average_loss += loss.item() #sol
+            total_steps += 1 #sol
+            total_correct += (predictions == Y_batch).sum().item() #sol
+            total_images += predictions.shape[0] #sol
+    average_loss = average_loss / total_steps #sol
+    accuracy = total_correct / total_images #sol
+    return average_loss, accuracy
+def create_plots(trainer: Trainer, name: str):
+    plot_path = pathlib.Path("plots")
+    plot_path.mkdir(exist_ok=True)
+    latex_figures = pathlib.Path("../latex/figures")
+    plt.figure(figsize=(20, 8))
+    plt.subplot(1, 2, 1)
+    plt.title("Cross Entropy Loss")
+    utils.plot_loss(trainer.train_history["loss"], label="Training loss", npoints_to_average=10)
+    utils.plot_loss(trainer.validation_history["loss"], label="Validation loss")
+    plt.legend()
+    plt.subplot(1, 2, 2)
+    plt.title("Accuracy")
+    utils.plot_loss(trainer.validation_history["accuracy"], label="Validation Accuracy")
+    plt.legend()
+    plt.savefig(plot_path.joinpath(f"{name}_plot.png"))
+    plt.savefig(latex_figures.joinpath(f"{name}_plot.png")) 
+    plt.show()
+def print_accuracy(trainer: Trainer): 
+    datasets = { 
+        "train": trainer.dataloader_train,
+        "test": trainer.dataloader_test,
+        "val": trainer.dataloader_val
+        }
+    trainer.load_best_model() 
+    for dset, dl in datasets.items():
+        avg_loss, accuracy = compute_loss_and_accuracy(dl, trainer.model, trainer.loss_criterion)
+        print(f"Dataset: {dset}, Accuracy: {accuracy}, loss: {avg_loss}")
+def load_tare(batch_size, train, test, validation_fraction=0.1):
+    mean = (0.4914, 0.4822, 0.4465)
+    std = (0.2023, 0.1994, 0.2010)
+
+    transform_train = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.ToTensor(),
+        #transforms.Normalize(mean, std),
+    ])
+    transform_test = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.ToTensor(),
+        #transforms.Normalize(mean, std)
+    ])
+    
+    training = transform_train(train)
+    testing  = transform_test(test)
+
+    indices = list(range(len(training)))
+    split_idx = int(np.floor(validation_fraction * len(training)))
+
+    val_indices = np.random.choice(indices, size=split_idx, replace=False)
+    train_indices = list(set(indices) - set(val_indices))
+
+    train_sampler = SubsetRandomSampler(train_indices)
+    validation_sampler = SubsetRandomSampler(val_indices)
+
+    dataloader_train = torch.utils.data.DataLoader(training,
+                                                   sampler=train_sampler,
+                                                   batch_size=batch_size,
+                                                   num_workers=2)
+
+    dataloader_val = torch.utils.data.DataLoader(training,
+                                                 sampler=validation_sampler,
+                                                 batch_size=batch_size,
+                                                 num_workers=2)
+
+    dataloader_test = torch.utils.data.DataLoader(testing,
+                                                  batch_size=batch_size,
+                                                  shuffle=False,
+                                                  num_workers=2)
+
+    return dataloader_train, dataloader_test, dataloader_val
+def apply_weight_init(module):
+    for m in module.modules():
+        if isinstance(m, torch.nn.Conv2d):
+            torch.nn.init.kaiming_normal_(m.weight)
